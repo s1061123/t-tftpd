@@ -1,0 +1,8 @@
+TODO
+ - Support kqueue/epoll instead of poll
+ - verbose option
+ - enable block option(tftp protocol)
+  + change buffer location
+  + SEGSIZE,PKTSIZE need to change constant to variable
+ - source address selection
+ - reflesh logs.

@@ -1,0 +1,27 @@
+t-tftpd Ver.1.1.8b2 2003-2-6(Thu)  / Tomofumi Hayashi (s1061123@gmail.com)
+
+Requirements:
+ - UNIX OS or some compatible OS(Linux etc....).
+	* cygwin support from 1.1.7.1, however, due to not support of IPv6 
+	on cygwin, please do configure with --enable-ipv4 option.
+ - POSIX thread library.
+
+Specification:
+ - Multi-thread(pthread) support tftp (Trival File Transfer Protocol) server.
+
+Command line options:
+t-tftpd -p [port] -r [rootdir] -t [thread]
+[port]: port number where it serve for tftpd. default is 69.
+[rootdir]: rootdir. default is current directory (one that is in "t-tftpd").
+[thread]: the threads for waiting. Default is 2. this number should be less than 256.
+
+Todo:
+ - Implementation of udp timeout.
+ - multi-process
+ - TFTP option support (in RFC 2347)
+ - Better logging system.
+
+Feedback information:
+ If you have questions, please mail(s1061123@gmail.com) me.
+ This software is not cool, so you may feel unconfortable. If you feel
+ it, please notice me. Your comment makes this software cool! ... maybe :)

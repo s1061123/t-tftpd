@@ -1,0 +1,53 @@
+2006-11-30 Tomofumi Hayashi   <tom@kagaribi>
+	* some source code refleshment (eliminate redundant macros, or so.)
+	* version 1.1.8b1 release.
+	* bug fix (correct ascii conversion, file cache).
+	* version 1.1.8b2 release.
+
+2004-08-17 Tomofumi Hayashi   <tom@ukifune>
+
+	* bug fix (in part of node_tree, block number at recv_file and configure.in)
+	* cygwin support. 
+	* version 1.1.7.1 release.
+
+2004-01-20  Tomofumi Hayashi  <thayashi@jaist.ac.jp>
+
+	* bug fix :)
+
+2003-12-26  Tomofumi Hayashi  <thayashi@jaist.ac.jp>
+
+	* configure.in : add --ipv4-only option for enable ipv4 only.
+	* src/tftpd.c, src/tftpd.h : make it IPv6 support (protocol
+	independent code.)
+	* misc: some bug fix.....?
+	
+2003-02-26  Tomofumi Hayashi  <thayashi@jaist.ac.jp>
+
+	* configure.in : add debug option.
+
+	* src/tftpd.c : add -t option (this changes the number of threads.)
+
+	* src/tftpd.c : DEFAULT_THREAD and socket_thread add to change the
+	number of threads.
+
+2003-02-13  Tomofumi Hayashi  <thayashi@jaist.ac.jp>
+
+	* src/tftpd.c (send_file): fix byte order problem (thanx to Mr. Suenaga).
+
+2003-02-13  Hayashi Tomofumi  <thayashi@jaist.ac.jp>
+
+	* src/tftpdsubs.c: add HAVE_STRLCPY declaration.
+
+	* all: prepare to release (support auto{make,conf}).
+
+2003-01-10  Hayashi Tomofumi  <thayashi@jaist.ac.jp>
+
+	* tftpd.c: not use signal on "change_node".
+	
+	* tftpd.c: Option code recognization (finished.)
+
+2002-12-31  Hayashi Tomofumi  <thayashi@jaist.ac.jp>
+
+	* tftpd.c: Option code recognization (but not finished.)
+
+
