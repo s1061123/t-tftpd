@@ -82,6 +82,12 @@
 #define PTHREAD_T_NULL -1
 #endif
 
+#ifdef HAVE_SYSCONF
+#define MMAP_FILE_MAP_SIZE  	sysconf(_SC_PAGE_SIZE)*16
+#else
+#define MMAP_FILE_MAP_SIZE  	getpagesize()
+#endif
+
 struct _tftp_thread {
   int peer;
   int total_timeout;
@@ -166,6 +172,24 @@ void server_main (void *);
 #ifdef _DEBUG
 extern int debug_level;
 #endif /* #ifdef _DEBUG */
+
+// for performance mesurement
+#ifdef PERFORMANCE_CHECK
+unsigned long long rdtsc1 = 0, rdtsc2 = 0;
+#define RDTSC(X) \
+    do { \
+        unsigned int eax, edx; \
+        __asm__ __volatile__ ("cpuid"::: "eax", "ebx", "ecx", "edx"); \
+        __asm__ __volatile__ ("rdtsc": "=a"(eax), "=d"(edx)); \
+        X = ((unsigned long long)edx << 32) | eax; \
+    } while (0);
+
+unsigned long long rdtsc() {
+    unsigned long long r;
+    RDTSC(r);
+    return r;
+}
+#endif
 
 /* global variables */
 #ifdef TFTPD_V4ONLY
@@ -942,12 +966,6 @@ void send_file_mmap(int fd)
 
   sock_fds[0].fd = thread_ptr->peer;
 
-  /* need to think about mmap's mapsize and filesize */
-//for linux
-#define MMAP_FILE_MAP_SIZE  	sysconf(_SC_PAGE_SIZE)
-//for *BSD
-//#define MMAP_FILE_MAP_SIZE  	getpagesize()
-
   do {
     buf = dp->th_data;
       
@@ -1064,7 +1082,6 @@ void send_file_mmap(int fd)
     block++;
   }
   while (read_buf == SEGSIZE);
-
   munmap(file_map, MMAP_FILE_MAP_SIZE);
   free(dp);
   free(ack);
@@ -1345,7 +1362,7 @@ void server_main (void *param)
     printf("param is NULL!\n");
     exit(0);
   }
-  printf("server_main.server_socket: 0x%p\n", param);
+  printf("server_main.server_socket: %p\n", param);
 
   for (cnt = 0; cnt < socket_threads; cnt++) {
     pthread_create(&(ptr->thread_tid[cnt]), NULL, 
