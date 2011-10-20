@@ -60,6 +60,7 @@ extern "C" {
 #include <netdb.h>
 #include <sys/mman.h>
 #include <poll.h>
+#include <errno.h>
 
 #define _DEBUG
 

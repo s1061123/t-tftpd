@@ -144,7 +144,8 @@ void fun_thread_once(void);
 void thread_destructor(void *ptr);
 void thread_packet_parse(void); 
 size_t read_data_ascii(FILE *fp, char *buf, size_t siz);
-size_t read_data_ascii_mmap(char *fbuf, char *buf, size_t siz);
+size_t read_data_ascii_mmap(char *fbuf, char *buf, size_t buf_size,
+                            size_t max_read, size_t *fill_size);
 size_t write_data_ascii(int fd, char *buf, size_t size); 
 void send_file(int fd); 
 void send_file_mmap(int fd); 
@@ -196,6 +197,7 @@ static char tftpd_root[PATH_SIZ];
 static int socket_threads;
 static char program_name[256];
 struct timeval timeout;
+static int use_mmap = 0;
 
 /* functions */
 int main(int argc, char **argv)
@@ -233,9 +235,9 @@ int main(int argc, char **argv)
 #endif
   socket_threads = DEFAULT_THREAD;
 #ifdef _DEBUG
-  while ((ch = getopt(argc, argv, "hr:p:t:d:")) != EOF)
+  while ((ch = getopt(argc, argv, "hmr:p:t:d:")) != EOF)
 #else
-  while ((ch = getopt(argc, argv, "hr:p:t:")) != EOF)
+  while ((ch = getopt(argc, argv, "hmr:p:t:")) != EOF)
 #endif
     {
       switch (ch) 
@@ -286,6 +288,9 @@ int main(int argc, char **argv)
 	  debug_level = atoi(optarg);
 	  break;
 #endif
+	case 'm': /* use mmap() */
+          use_mmap = 1;
+	  break;
 	case 'h': /* help */
 	  err = 1;
 	  break;
@@ -462,16 +467,17 @@ void print_usage (void)
   fprintf(stdout, 
 	  "\n"
 	  "t-tftpd %s "
-	  "copywright by Tom (s1061123@gmail.com)\n\n"
+	  "copyright by Tomofumi Hayashi (s1061123@gmail.com)\n\n"
 	  "Usage: %s [OPTION] ...\n"
-	  "  -r <directory> \t tftpd's rootdir (default: \".\")\n"
+	  "  -h \t\t\t display this help and exit\n"
+          "  -m \t\t\t use mmap() for file sending (experimental)\n"
 #ifdef TFTPD_V4ONLY
 	  "  -p <num> \t\t port number (default: %d)\n"
 #else
 	  "  -p <num> \t\t port number (default: %s)\n"
 #endif
+	  "  -r <directory> \t tftpd's rootdir (default: \".\")\n"
 	  "  -t <num> \t\t threads for waiting client (default: %d)\n"
-	  "  -h \t\t\t display this help and exit\n"
 	  "\n\n"
 	  ,
 	  VERSION, 
@@ -617,8 +623,11 @@ void thread_packet_parse(void)
     /*
       syslog(LOG_NOTICE, "tftpd RRQ: %s", filename);
     */
-    //send_file_mmap(fd);
-    send_file(fd);
+    if (use_mmap) {
+      send_file_mmap(fd);
+    } else {
+      send_file(fd);
+    }
   }
   else {
     /*
@@ -635,7 +644,7 @@ void thread_packet_parse(void)
 size_t read_data_ascii(FILE *fp, char *buf, size_t siz)
 {
   char *cptr;
-  int size, ch;
+  int size, ch, read_size = 0;
   tftpd_thread *thread_ptr;
   thread_ptr = pthread_getspecific(thread_key);
   int newline = thread_ptr->newline;
@@ -661,6 +670,7 @@ size_t read_data_ascii(FILE *fp, char *buf, size_t siz)
 	ch = '\r';
 	newline = 1;
       }
+      read_size++;
     }
     *cptr = ch;
     cptr++;
@@ -671,18 +681,25 @@ size_t read_data_ascii(FILE *fp, char *buf, size_t siz)
   return size;
 }
 
-size_t read_data_ascii_mmap(char *fbuf, char *buf, size_t siz)
+/*
+ * lf->cr,lf    cr->cr,nul
+ * fill_size means that the filled buffer size.
+ */
+size_t read_data_ascii_mmap(char *fbuf, char *buf, size_t buf_size,
+                            size_t max_read, size_t *read_size)
 {
   char *cptr;
-  int size, ch;
+  char *fptr;
+  int size, ch, rd_size = 0;
   tftpd_thread *thread_ptr;
   thread_ptr = pthread_getspecific(thread_key);
   int newline = thread_ptr->newline;
   int prevchar = thread_ptr->prevchar;
   cptr = buf;
+  fptr = fbuf;
 
-  memset(buf, '\0', sizeof(char)*siz);
-  for (size = 0; size < siz; size++) {
+  memset(buf, '\0', sizeof(char)*buf_size);
+  for (size = 0; size < buf_size; size++) {
     if (newline) {
       if(prevchar == '\n')
 	ch = '\n';
@@ -691,16 +708,16 @@ size_t read_data_ascii_mmap(char *fbuf, char *buf, size_t siz)
       newline = 0;
     }
     else {
-      ch = *fbuf; fbuf++;
-      // ch = getc(fp);
-      if (ch == EOF) {
-	break;
+      if (rd_size >= max_read) {
+        break;
       }
+      ch = *fptr; fptr++;
       if (ch == '\n' || ch == '\r') {
 	prevchar = ch;
 	ch = '\r';
 	newline = 1;
       }
+      rd_size++;
     }
     *cptr = ch;
     cptr++;
@@ -708,6 +725,7 @@ size_t read_data_ascii_mmap(char *fbuf, char *buf, size_t siz)
 
   thread_ptr->newline = newline;
   thread_ptr->prevchar = prevchar;
+  *read_size = rd_size;
   return size;
 }
 
@@ -841,7 +859,7 @@ void send_file(int fd)
     d_printf(10, ("send!\n"));
 
     for (;;)	{
-      /* TIMEOUT must be exponatial increase. */
+      /* XXX: TIMEOUT must be exponatial increase. */
       sock_fds[0].events = POLLIN;
       ret = poll(sock_fds, 1, TIMEOUT * 1000);
       if (ret == 0 || ret == -1) {
@@ -890,24 +908,24 @@ void send_file_mmap(int fd)
 {
   struct tftphdr *dp, *ack;
   FILE *fp;
-  int read_buf, read_pkt;
+  int read_buf, read_pkt; 
+  size_t read_buf_ascii;
   char *buf;
   uint16_t block;
   int tmp;
   tftpd_thread *thread_ptr;
-  char *file_map;
-  char *mmap_ptr;
+  char *file_map = NULL;
+  char *mmap_ptr = NULL;
   uint32_t mmap_off = 0;
   int ret;
   struct pollfd sock_fds[1];
-
-#ifdef _DEBUG
   int total = 0;
   struct stat st;
+  int read_ascii_done = 0;
+
   if (fstat(fd, &st) == -1) {
 	d_printf(10, ("fstat() failed!\n"));
   }
-#endif
 
   thread_ptr = pthread_getspecific(thread_key);
   thread_ptr->total_timeout = 0;
@@ -924,29 +942,50 @@ void send_file_mmap(int fd)
 
   sock_fds[0].fd = thread_ptr->peer;
 
-/* mmapのマップサイズとファイルサイズについて再考が必要 */
-#define MMAP_FILE_MAP_SIZE  	1024
-  mmap_ptr = file_map = mmap(0, MMAP_FILE_MAP_SIZE, PROT_READ, 
-                      MAP_FILE, fd, mmap_off);
-  if (file_map == 0) {
-      fprintf(stderr, "read error.\n");
-  }
+  /* need to think about mmap's mapsize and filesize */
+//for linux
+#define MMAP_FILE_MAP_SIZE  	sysconf(_SC_PAGE_SIZE)
+//for *BSD
+//#define MMAP_FILE_MAP_SIZE  	getpagesize()
+
   do {
     buf = dp->th_data;
       
+    d_printf(10, ("%p %p\n", mmap_ptr+SEGSIZE, file_map + MMAP_FILE_MAP_SIZE));
+    if (mmap_ptr == NULL ||
+        mmap_ptr + SEGSIZE > file_map + MMAP_FILE_MAP_SIZE) {
+        if (file_map != NULL) {
+            d_printf(10, ("Unmap file\n"));
+            munmap(file_map, MMAP_FILE_MAP_SIZE);
+        }
+
+        d_printf(10, ("Map file from (%d, size:%d)\n",
+                      mmap_off, MMAP_FILE_MAP_SIZE));
+        mmap_ptr = file_map = mmap(0, MMAP_FILE_MAP_SIZE, PROT_READ, 
+			           MAP_FILE|MAP_SHARED, fd, mmap_off);
+        if (file_map == MAP_FAILED) {
+            fprintf(stderr, "read error:%s\n", strerror(errno));
+        }
+        mmap_off += MMAP_FILE_MAP_SIZE;
+    }
+
+    if (total + SEGSIZE >= st.st_size) {
+        read_buf = st.st_size - total;
+    } else {
+        read_buf = SEGSIZE;
+    }
+
     if (thread_ptr->mode == OCTET) {
-        memcpy(buf, mmap_ptr, SEGSIZE);
-	printf("mmap_ptr: %s--", buf);
-        mmap_ptr+=SEGSIZE; 
-	read_buf = SEGSIZE;
+        memcpy(buf, mmap_ptr, read_buf);
+        d_printf(10, ("%d bytes read.\n", read_buf));
+        mmap_ptr+=read_buf; 
     }
     else {
-        read_buf = read_data_ascii_mmap(mmap_ptr, buf, sizeof(char) * SEGSIZE);
-    }
-    d_printf(10, ("%d bytes read.\n", read_buf));
-
-    if (read_buf == -1) {
-      fprintf(stderr, "read error.\n");
+        read_buf = read_data_ascii_mmap(mmap_ptr, buf, SEGSIZE,
+                                        read_buf, &read_buf_ascii);
+        d_printf(10, ("%s\n", buf));
+        mmap_ptr+=read_buf_ascii; 
+        d_printf(10, ("%d (read:%d) bytes read.\n", read_buf, read_buf_ascii));
     }
 
   send_data: 
@@ -970,7 +1009,11 @@ void send_file_mmap(int fd)
 		  dp->th_block, tmp));
 #ifdef _DEBUG
     if (st.st_size != 0) {
-      total += read_buf;
+      if (thread_ptr->mode == OCTET) {
+        total += read_buf;
+      } else {
+        total += read_buf_ascii;
+      }
       d_printf(10, ("total: %d/%d bytes\n", total, (int)st.st_size));
     }
 #endif
@@ -982,7 +1025,7 @@ void send_file_mmap(int fd)
     d_printf(10, ("send!\n"));
 
     for (;;)	{
-      /* TIMEOUT must be exponatial increase. */
+      /* XXX: TIMEOUT must be exponatial increase. */
       sock_fds[0].events = POLLIN;
       ret = poll(sock_fds, 1, TIMEOUT * 1000);
       if (ret == 0 || ret == -1) {
@@ -1020,7 +1063,7 @@ void send_file_mmap(int fd)
     }
     block++;
   }
-  while (read_buf == 512);
+  while (read_buf == SEGSIZE);
 
   munmap(file_map, MMAP_FILE_MAP_SIZE);
   free(dp);
