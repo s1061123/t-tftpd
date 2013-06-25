@@ -82,10 +82,11 @@
 #define PTHREAD_T_NULL -1
 #endif
 
+#define MMAP_FILE_MAP_MULTIPLY  32
 #ifdef HAVE_SYSCONF
-#define MMAP_FILE_MAP_SIZE  	sysconf(_SC_PAGE_SIZE)*16
+#define MMAP_FILE_MAP_SIZE  	sysconf(_SC_PAGE_SIZE)*MMAP_FILE_MAP_MULTIPLY
 #else
-#define MMAP_FILE_MAP_SIZE  	getpagesize()
+#define MMAP_FILE_MAP_SIZE  	getpagesize()*MMAP_FILE_MAP_MULTIPLY
 #endif
 
 struct _tftp_thread {
@@ -174,6 +175,7 @@ extern int debug_level;
 #endif /* #ifdef _DEBUG */
 
 // for performance mesurement
+#define PERFORMANCE_CHECK 1
 #ifdef PERFORMANCE_CHECK
 unsigned long long rdtsc1 = 0, rdtsc2 = 0;
 #define RDTSC(X) \
@@ -338,6 +340,9 @@ int main(int argc, char **argv)
     exit(0);
   }
 
+#ifdef PERFORMANCE_CHECK
+  printf("mmap map size: %d\n", MMAP_FILE_MAP_SIZE);
+#endif
   /* create a server socket and bind to port */
 #ifdef TFTPD_V4ONLY
   sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -966,6 +971,9 @@ void send_file_mmap(int fd)
 
   sock_fds[0].fd = thread_ptr->peer;
 
+#ifdef PERFORMANCE_CHECK
+  rdtsc1 = rdtsc();
+#endif
   do {
     buf = dp->th_data;
       
@@ -1082,6 +1090,10 @@ void send_file_mmap(int fd)
     block++;
   }
   while (read_buf == SEGSIZE);
+#ifdef PERFORMANCE_CHECK
+    rdtsc2 = rdtsc();
+    printf("done: %llu - %llu = %llu\n", rdtsc2, rdtsc1, rdtsc2 - rdtsc1);
+#endif
   munmap(file_map, MMAP_FILE_MAP_SIZE);
   free(dp);
   free(ack);

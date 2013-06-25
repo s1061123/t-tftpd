@@ -1,5 +1,4 @@
 TODO
- - Support kqueue/epoll instead of poll
  - verbose option
  - enable block option(tftp protocol)
   + change buffer location
