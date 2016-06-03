@@ -171,11 +171,11 @@ void server_main (void *);
 #endif
 
 #ifdef _DEBUG
+#define PERFORMANCE_CHECK
 extern int debug_level;
 #endif /* #ifdef _DEBUG */
 
 // for performance mesurement
-#define PERFORMANCE_CHECK 1
 #ifdef PERFORMANCE_CHECK
 unsigned long long rdtsc1 = 0, rdtsc2 = 0;
 #define RDTSC(X) \
